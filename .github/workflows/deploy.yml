@@ -56,7 +56,8 @@ jobs:
 
       - name: Prova dell'immagine (avvio e /health)
         run: |
-          docker run -d --name demo -p 8000:8000 \
+          # stessi valori di Render: PORT diversa e FORWARDED_ALLOW_IPS="*"
+          docker run -d --name demo -p 8000:10000 -e PORT=10000 -e FORWARDED_ALLOW_IPS='*' \
             -e SECRET_KEY="$(openssl rand -hex 32)" -e CONTACT_HASH_KEY="$(openssl rand -hex 32)" \
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}
           for i in $(seq 1 60); do

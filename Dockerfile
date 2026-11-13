@@ -43,4 +43,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
     CMD python -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen(f'http://localhost:{os.environ[\"PORT\"]}/api/v1/health').status==200 else 1)"
 # FORWARDED_ALLOW_IPS: indirizzi dei proxy fidati (su Render "*") per leggere il vero IP del client
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-127.0.0.1}"]
+# (virgolette obbligatorie: senza, la shell espanderebbe "*" nell'elenco dei file)
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT}\" --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS:-127.0.0.1}\""]
