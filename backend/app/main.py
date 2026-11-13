@@ -33,6 +33,7 @@ from app.rag.engine import RagEngine
 from app.services import indexing, retention
 from app.services.admins import ensure_admin
 from app.services.documents import seed_example_documents
+from app.web import mount_frontend
 from app.worker.processor import MessageProcessor
 from app.worker.runtime import build_channels
 
@@ -119,7 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         headers.setdefault("Referrer-Policy", "no-referrer")
         headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
-        if not request.url.path.startswith(docs_paths):
+        if request.url.path.startswith(API_PREFIX) and not request.url.path.startswith(docs_paths):
             # l'API restituisce solo JSON: nessuna risorsa da caricare, nessun frame
             headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         if request.url.path.startswith(API_PREFIX) and request.url.path not in docs_paths:
@@ -134,6 +135,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(whatsapp.router, prefix=API_PREFIX)
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
+    if settings.static_dir:
+        mount_frontend(app, settings.static_dir, API_PREFIX)  # dopo le API: fa da fallback
     return app
 
 

@@ -1,0 +1,27 @@
+# Blueprint Render (https://render.com/docs/blueprint-spec): demo gratuita in un solo servizio.
+# Render → New → Blueprint → collega questa repository. I segreti vengono generati da Render;
+# ADMIN_EMAIL e ADMIN_PASSWORD si inseriscono a mano nella dashboard (sync: false).
+services:
+  - type: web
+    name: assistente-ncc-rag
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: false # il deploy parte da GitHub Actions solo dopo che la CI è verde
+    envVars:
+      - key: APP_ENV
+        value: demo
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CONTACT_HASH_KEY
+        generateValue: true
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: FRONTEND_ORIGIN
+        value: https://assistente-ncc-rag.onrender.com
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -43,7 +43,8 @@ dipendenza.
 | Limiti della chat per IP (10 messaggi al minuto, 100 al giorno) | ✅ F4 |
 | Header di sicurezza (CSP, HSTS, Permissions-Policy) e controlli di accessibilità con axe-core | ✅ F4 |
 | pip-audit, npm audit e Dependabot | ✅ F4 |
-| Demo online con deploy automatico | 🔜 F5 |
+| Immagine unica (frontend + API) pubblicata su GitHub Container Registry | ✅ F5 |
+| Deploy automatico della demo su Render dopo la CI verde, con verifica di `/health` | ✅ F5 |
 
 ## Architettura
 
@@ -154,6 +155,38 @@ Senza account Meta si può simulare un messaggio firmato:
 ```bash
 META_APP_SECRET=<valore del .env> python scripts/send_test_webhook.py "Accettate animali a bordo?"
 ```
+
+## Deploy
+
+```
+push su main ──► CI (lint, test, audit, build) ──verde──► Deploy
+                                                          ├─ immagine su ghcr.io (latest + sha)
+                                                          ├─ prova dell'immagine: /health, chat, admin
+                                                          └─ deploy hook Render ──► verifica della demo
+```
+
+L'immagine della radice (`Dockerfile`) contiene il frontend compilato e l'API: un solo servizio,
+SQLite, coda in memoria e risposte estrattive, quindi gira anche su un piano gratuito.
+
+```bash
+docker run -p 8000:8000 \
+  -e SECRET_KEY="$(openssl rand -hex 32)" -e CONTACT_HASH_KEY="$(openssl rand -hex 32)" \
+  ghcr.io/dottssacarroneantonella-webdeveloper/assistente-ncc-rag:latest
+# http://localhost:8000
+```
+
+**Demo su Render** (configurazione in `render.yaml`):
+
+1. Render → *New* → *Blueprint* → collega questa repository: `SECRET_KEY` e `CONTACT_HASH_KEY`
+   vengono generati da Render; inserisci `ADMIN_EMAIL` e `ADMIN_PASSWORD` nella dashboard.
+2. Nelle impostazioni del servizio copia il *Deploy Hook* e salvalo su GitHub come secret
+   `RENDER_DEPLOY_HOOK_URL` (*Settings → Secrets and variables → Actions*).
+3. Aggiungi la variabile `DEMO_URL` (es. `https://assistente-ncc-rag.onrender.com`): il workflow
+   verifica che la demo risponda dopo ogni deploy.
+
+Sul piano gratuito il servizio va in pausa dopo 15 minuti senza visite: la prima richiesta può
+richiedere fino a un minuto, e i dati della demo si azzerano a ogni riavvio (i documenti di
+esempio vengono ricaricati automaticamente).
 
 ## API
 

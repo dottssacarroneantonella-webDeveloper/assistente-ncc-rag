@@ -70,10 +70,12 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   docker:
-    name: Build immagine Docker
+    name: Build immagini Docker
     runs-on: ubuntu-latest
-    needs: backend
+    needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: docker build -f backend/Dockerfile -t assistente-ncc-rag:ci .
+      - name: Build immagine backend (Docker Compose)
+        run: docker build -f backend/Dockerfile -t assistente-ncc-rag-backend:ci .
+      - name: Build immagine completa (demo)
+        run: docker build -t assistente-ncc-rag:ci .

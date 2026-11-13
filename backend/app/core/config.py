@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     # Chat web
     frontend_origin: str = "http://localhost:5173"
+    # cartella con il frontend compilato (npm run build): se presente l'API serve anche la SPA
+    static_dir: Path | None = None
     max_question_chars: int = Field(default=1000, ge=10, le=4096)
 
     # Privacy
@@ -98,6 +100,7 @@ class Settings(BaseSettings):
         "meta_verify_token",
         "admin_email",
         "admin_password",
+        "static_dir",
         mode="before",
     )
     @classmethod
