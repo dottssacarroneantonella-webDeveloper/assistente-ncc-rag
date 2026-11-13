@@ -16,6 +16,7 @@ class OutgoingReply:
     conversation_id: str
     message_id: str
     body: str
+    recipient: str | None = None  # numero WhatsApp: viaggia solo nell'evento, mai nel database
 
 
 class Channel(ABC):
@@ -23,4 +24,7 @@ class Channel(ABC):
 
     @abstractmethod
     async def deliver(self, reply: OutgoingReply) -> None:
-        """Consegna la risposta all'utente. Può sollevare ``TransientError``."""
+        """Consegna la risposta all'utente."""
+
+    async def close(self) -> None:  # noqa: B027 - facoltativo per i canali senza risorse
+        """Libera le risorse del canale."""

@@ -27,9 +27,14 @@ dipendenza.
 | Ritentativi automatici (3 tentativi, attesa 2/4/8 s) e messaggio di scuse | ✅ F1 |
 | Comando `CANCELLA DATI` per eliminare la conversazione | ✅ F1 |
 | Endpoint `/health` (database, coda, indice) | ✅ F1 |
-| Webhook WhatsApp firmato, deduplica, RabbitMQ, worker separato | 🔜 F2 |
+| Webhook WhatsApp con verifica della firma `X-Hub-Signature-256` e handshake Meta | ✅ F2 |
+| Deduplica dei messaggi (stesso `wamid` → una sola risposta) | ✅ F2 |
+| RabbitMQ: coda durevole, ack manuale, code di ritardo e coda di errore (DLQ) | ✅ F2 |
+| Worker separato (`python -m app.worker`) e invio delle risposte con la Graph API | ✅ F2 |
+| Audio, immagini e posizioni: risposta che invita a scrivere la domanda | ✅ F2 |
+| Numeri di telefono mai salvati: solo HMAC-SHA256 + ultime 4 cifre | ✅ F2 |
 | Area admin: login, caricamento PDF, reindicizzazione, domande senza risposta | 🔜 F3 |
-| GDPR (numeri cifrati con HMAC, conservazione 30 giorni) e hardening | 🔜 F4 |
+| GDPR (conservazione 30 giorni, informativa) e hardening | 🔜 F4 |
 | Demo online con deploy automatico | 🔜 F5 |
 
 ## Architettura
@@ -50,8 +55,23 @@ flowchart LR
 ```
 
 **Perché la coda?** Il webhook di WhatsApp deve rispondere in pochi secondi, mentre un LLM può
-impiegarne di più. L'API salva il messaggio e risponde subito (`202 Accepted`); il worker elabora
-con calma, ritenta se l'LLM non risponde e non perde messaggi.
+impiegarne di più. L'API salva il messaggio e risponde subito (`200` a Meta, `202` alla chat web);
+il worker elabora con calma, ritenta se l'LLM non risponde e non perde messaggi.
+
+**Affidabilità con RabbitMQ**
+
+```
+ncc.events ──► worker ──ok──► ack
+    ▲            │
+    │            └─errore temporaneo─► ncc.events.retry.2000 ─(TTL)─┐
+    │                                  ncc.events.retry.4000 ─(TTL)─┤
+    └───────────────────────────────────────────────────────────────┘
+                 └─dopo l'ultimo tentativo─► ncc.events.dlq + messaggio di scuse
+```
+
+Il messaggio viene confermato (ack) solo dopo aver salvato la risposta: se il worker si ferma
+a metà, RabbitMQ lo riconsegna. Il worker è idempotente, quindi una riconsegna non produce
+risposte doppie.
 
 **Scelte principali**
 
@@ -98,14 +118,32 @@ ollama pull llama3.2
 ANSWER_GENERATOR=ollama
 ```
 
-### Con Docker (PostgreSQL)
+### Con Docker (PostgreSQL + RabbitMQ + worker)
 
 ```bash
 cp .env.example .env
 docker compose up --build          # API su http://localhost:8000
+                                   # pannello RabbitMQ su http://localhost:15672
 ```
 
-## API (F1)
+### Collegare WhatsApp (Meta Cloud API)
+
+1. Su [Meta for Developers](https://developers.facebook.com/) crea un'app di tipo *Business* e
+   aggiungi il prodotto **WhatsApp**: ottieni un numero di test, il *Phone number ID* e un token.
+2. Compila nel file `.env` (mai su GitHub): `WHATSAPP_ENABLED=true`, `META_ACCESS_TOKEN`,
+   `META_PHONE_NUMBER_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN` e `CONTACT_HASH_KEY`.
+3. Esponi l'API in HTTPS (in locale con un tunnel, es. `cloudflared tunnel --url http://localhost:8000`).
+4. In *WhatsApp → Configurazione* inserisci come URL di callback
+   `https://<tuo-dominio>/api/v1/whatsapp/webhook`, lo stesso `META_VERIFY_TOKEN` e
+   iscriviti al campo **messages**.
+
+Senza account Meta si può simulare un messaggio firmato:
+
+```bash
+META_APP_SECRET=<valore del .env> python scripts/send_test_webhook.py "Accettate animali a bordo?"
+```
+
+## API
 
 | Metodo | Percorso | Descrizione |
 |---|---|---|
@@ -113,18 +151,22 @@ docker compose up --build          # API su http://localhost:8000
 | POST | `/api/v1/chat/conversations` | Nuova conversazione (201) con messaggio di benvenuto |
 | POST | `/api/v1/chat/conversations/{id}/messages` | Invia una domanda (202 + `message_id`) |
 | GET | `/api/v1/chat/conversations/{id}/messages?after=` | Messaggi e risposte con fonti |
+| GET | `/api/v1/whatsapp/webhook` | Handshake di verifica di Meta (`hub.challenge`) |
+| POST | `/api/v1/whatsapp/webhook` | Messaggi WhatsApp in arrivo (firma obbligatoria) |
 
 Documentazione interattiva: `http://localhost:8000/api/v1/docs`.
 
 ## Test
 
 ```bash
-cd backend && pytest --cov=app        # API, worker, coda, intenti, migrazioni
+cd backend && pytest --cov=app        # API, webhook, worker, coda, intenti, migrazioni
+RABBITMQ_TEST_URL=amqp://guest:guest@localhost:5672/ pytest tests/test_rabbitmq.py
 cd frontend && npm test               # componenti React con Vitest
 ```
 
-La CI su GitHub Actions esegue lint (ruff), test con copertura minima dell'80%, controllo dei
-tipi TypeScript, build del frontend e build dell'immagine Docker a ogni push.
+La CI su GitHub Actions esegue lint (ruff), test con copertura minima dell'80% (con un RabbitMQ
+reale come container di servizio), controllo dei tipi TypeScript, build del frontend e build
+dell'immagine Docker a ogni push.
 
 ## Struttura
 
@@ -132,18 +174,18 @@ tipi TypeScript, build del frontend e build dell'immagine Docker a ogni push.
 backend/
   app/
     api/        endpoint FastAPI, schemi, gestione errori
-    channels/   consegna delle risposte (web; WhatsApp in F2)
+    channels/   consegna delle risposte (web, WhatsApp) e lettura dei payload Meta
     core/       configurazione e log strutturati
     db/         modelli SQLAlchemy e sessioni
-    queue/      interfaccia coda + implementazione in memoria
+    queue/      interfaccia coda: RabbitMQ (aio-pika) e in memoria
     rag/        adattatore verso rag-pdf-qa
     services/   conversazioni, documenti, indicizzazione
-    worker/     intenti ed elaborazione dei messaggi
+    worker/     intenti, elaborazione dei messaggi, worker separato
   alembic/      migrazioni del database
   tests/
 frontend/       chat React + TypeScript (Vite)
 examples/       PDF fittizi dell'attività
-scripts/        generazione dei PDF di esempio
+scripts/        PDF di esempio e simulatore di webhook firmati
 docs/spec/      specifica tecnica
 ```
 
@@ -153,8 +195,10 @@ docs/spec/      specifica tecnica
 - Validazione degli input (lunghezza massima della domanda, UUID, JSON).
 - Header di sicurezza (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) e CORS ristretto al frontend.
 - Container eseguito con utente non root.
-- In arrivo (F3-F4): password Argon2id, JWT in cookie HttpOnly con CSRF, rate limiting,
-  firma dei webhook Meta, numeri di telefono salvati solo come HMAC.
+- Webhook Meta accettati solo con firma HMAC-SHA256 valida (confronto a tempo costante).
+- Numeri di telefono mai salvati in chiaro: HMAC-SHA256 con chiave segreta + ultime 4 cifre;
+  il numero viaggia solo nell'evento in coda, il tempo necessario a rispondere.
+- In arrivo (F3-F4): password Argon2id, JWT in cookie HttpOnly con CSRF, rate limiting, CSP.
 
 ## Licenza
 

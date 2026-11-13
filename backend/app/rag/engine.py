@@ -69,6 +69,7 @@ class RagEngine:
         self.index_dir = Path(settings.rag_index_dir)
         self._lock = threading.Lock()
         self._pipeline: RagPipeline | None = None
+        self._loaded_version: float | None = None
 
     def _rag_settings(self, index_dir: Path) -> RagSettings:
         s = self.settings
@@ -90,6 +91,12 @@ class RagEngine:
     def is_ready(self) -> bool:
         return (self.index_dir / "manifest.json").exists()
 
+    def _index_version(self) -> float | None:
+        try:
+            return (self.index_dir / "manifest.json").stat().st_mtime
+        except FileNotFoundError:
+            return None
+
     def rebuild(self, docs_dir: Path) -> RebuildReport:
         """Ricostruisce l'indice dai PDF di ``docs_dir`` e lo sostituisce in modo atomico."""
         self.index_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -110,10 +117,13 @@ class RagEngine:
 
     def _get_pipeline(self) -> RagPipeline:
         with self._lock:
-            if self._pipeline is None:
-                if not self.is_ready:
-                    raise IndexNotReadyError("Indice non ancora disponibile")
+            version = self._index_version()
+            if version is None:
+                raise IndexNotReadyError("Indice non ancora disponibile")
+            # il worker separato ricarica l'indice quando l'API lo ricostruisce
+            if self._pipeline is None or version != self._loaded_version:
                 self._pipeline = RagPipeline(self._rag_settings(self.index_dir))
+                self._loaded_version = version
             return self._pipeline
 
     def answer(self, question: str) -> RagAnswer:

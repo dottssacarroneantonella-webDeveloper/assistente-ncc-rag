@@ -69,13 +69,13 @@ class MessageProcessor:
             return
         outcome = await asyncio.to_thread(self._process, event)
         if outcome is not None:
-            await self._deliver(outcome)
+            await self._deliver(outcome, event)
 
     async def on_failure(self, event: Event, error: Exception) -> None:
         log_event(logger, "message.failed", attempt=event.attempt, error=str(error))
         outcome = await asyncio.to_thread(self._mark_failed, event)
         if outcome is not None:
-            await self._deliver(outcome)
+            await self._deliver(outcome, event)
 
     # --- logica sincrona (eseguita in un thread) ---------------------------------------------
 
@@ -161,11 +161,21 @@ class MessageProcessor:
             reply = conv.add_reply(session, incoming, FAILURE_REPLY, "failed", "intent")
             return _Outcome(incoming.conversation_id, reply.id, reply.body, incoming.conversation.channel)
 
-    async def _deliver(self, outcome: _Outcome) -> None:
+    async def _deliver(self, outcome: _Outcome, event: Event) -> None:
+        """Consegna la risposta già salvata. Un errore di consegna non annulla la risposta:
+        viene registrato nel log e l'evento è comunque considerato elaborato."""
         channel = self.channels.get(outcome.channel)
         if channel is None:
-            logger.error("Canale sconosciuto: %s", outcome.channel)
+            logger.error("Canale non disponibile: %s", outcome.channel)
             return
-        await channel.deliver(
-            OutgoingReply(str(outcome.conversation_id), str(outcome.reply_id), outcome.body)
+        recipient = event.payload.get("to")
+        reply = OutgoingReply(
+            str(outcome.conversation_id),
+            str(outcome.reply_id),
+            outcome.body,
+            recipient=str(recipient) if recipient else None,
         )
+        try:
+            await channel.deliver(reply)
+        except Exception as exc:
+            log_event(logger, "reply.delivery_failed", channel=outcome.channel, error=str(exc))

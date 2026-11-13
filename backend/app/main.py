@@ -3,7 +3,8 @@
 All'avvio (lifespan):
 1. crea lo schema se ``AUTO_CREATE_SCHEMA`` è attivo (demo e test; in produzione Alembic);
 2. se non ci sono documenti carica i PDF di esempio e costruisce l'indice (RF-14);
-3. con la coda in memoria avvia il worker nello stesso processo.
+3. con la coda in memoria avvia il worker nello stesso processo; con RabbitMQ il worker
+   è un processo separato (``python -m app.worker``).
 """
 
 from __future__ import annotations
@@ -19,10 +20,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app import __version__
-from app.api import chat, health
+from app.api import chat, health, whatsapp
 from app.api.deps import AppState
 from app.api.errors import register_error_handlers
-from app.channels.web import WebChannel
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.base import Base
@@ -32,6 +32,7 @@ from app.rag.engine import RagEngine
 from app.services import indexing
 from app.services.documents import seed_example_documents
 from app.worker.processor import MessageProcessor
+from app.worker.runtime import build_channels
 
 logger = logging.getLogger(__name__)
 API_PREFIX = "/api/v1"
@@ -62,9 +63,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.services = state
 
         await asyncio.to_thread(_bootstrap_documents, state)
+        await queue.connect()
 
-        processor = MessageProcessor(db, engine, settings, channels={"web": WebChannel()})
+        channels = build_channels(settings)
+        processor = MessageProcessor(db, engine, settings, channels)
         app.state.processor = processor
+        # con la coda in memoria il worker gira nello stesso processo dell'API;
+        # con RabbitMQ gira separato (python -m app.worker)
         if settings.queue_backend == "memory":
             await queue.start_consuming(processor.handle, processor.on_failure)
         logger.info("Avvio completato (versione %s, coda %s)", __version__, settings.queue_backend)
@@ -72,6 +77,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await queue.close()
+            for channel in channels.values():
+                await channel.close()
             db.engine.dispose()
 
     app = FastAPI(
@@ -100,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(chat.router, prefix=API_PREFIX)
+    app.include_router(whatsapp.router, prefix=API_PREFIX)
     return app
 
 

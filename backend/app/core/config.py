@@ -56,11 +56,46 @@ class Settings(BaseSettings):
 
     # Privacy
     retention_days: int = Field(default=30, ge=1)
+    contact_hash_key: str = "solo-per-sviluppo-cambiami"  # in produzione: valore casuale lungo
 
-    @field_validator("openai_api_key", "rag_min_score", mode="before")
+    # WhatsApp (Meta Cloud API) – attivo solo se WHATSAPP_ENABLED=true e i valori sono presenti
+    whatsapp_enabled: bool = False
+    meta_access_token: str | None = None
+    meta_phone_number_id: str | None = None
+    meta_app_secret: str | None = None
+    meta_verify_token: str | None = None
+    meta_graph_version: str = "v21.0"
+    meta_graph_base_url: str = "https://graph.facebook.com"
+    meta_timeout_seconds: float = Field(default=10.0, gt=0)
+
+    # Worker
+    worker_prefetch: int = Field(default=4, ge=1, le=100)
+    queue_prefix: str = "ncc"
+
+    @field_validator(
+        "openai_api_key",
+        "rag_min_score",
+        "meta_access_token",
+        "meta_phone_number_id",
+        "meta_app_secret",
+        "meta_verify_token",
+        mode="before",
+    )
     @classmethod
     def _empty_to_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @property
+    def whatsapp_configured(self) -> bool:
+        """True se WhatsApp è attivo e tutte le credenziali Meta sono presenti."""
+        return self.whatsapp_enabled and all(
+            (
+                self.meta_access_token,
+                self.meta_phone_number_id,
+                self.meta_app_secret,
+                self.meta_verify_token,
+            )
+        )
 
     @property
     def is_sqlite(self) -> bool:

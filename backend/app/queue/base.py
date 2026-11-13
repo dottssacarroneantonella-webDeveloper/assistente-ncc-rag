@@ -40,6 +40,9 @@ FailureHandler = Callable[[Event, Exception], Awaitable[None]]
 class MessageQueue(ABC):
     """Coda con ritentativi e gestione dei fallimenti definitivi."""
 
+    async def connect(self) -> None:  # noqa: B027 - le code in memoria non hanno nulla da aprire
+        """Apre la connessione (se serve). Chiamato all'avvio di API e worker."""
+
     @abstractmethod
     async def publish(self, event: Event) -> None:
         """Mette in coda un evento."""
