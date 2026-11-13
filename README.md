@@ -14,6 +14,11 @@ Meta c'è una **chat web in stile WhatsApp** che usa esattamente la stessa pipel
 **▶ Demo online: [assistente-ncc-rag.onrender.com](https://assistente-ncc-rag.onrender.com)**
 (piano gratuito: se il servizio era in pausa, la prima apertura richiede circa un minuto)
 
+<p align="center">
+  <img src="docs/img/demo-chat.png" width="360"
+       alt="Chat della demo: alla domanda sul transfer Bari–Monopoli l'assistente risponde 85 euro; alla domanda sugli animali risponde citando condizioni_servizio.pdf, pagina 2">
+</p>
+
 Il motore di ricerca sui documenti è la mia libreria
 [rag-pdf-qa](https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa), usata qui come
 dipendenza.
