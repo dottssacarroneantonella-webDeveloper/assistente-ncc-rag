@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class HealthOut(BaseModel):
     status: Literal["ok", "degraded"]
     version: str
+    commit: str | None  # commit Git pubblicato (GIT_COMMIT o RENDER_GIT_COMMIT), se noto
     database: bool
     queue: bool
     index_ready: bool

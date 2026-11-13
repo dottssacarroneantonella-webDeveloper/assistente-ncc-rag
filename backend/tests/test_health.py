@@ -25,3 +25,13 @@ def test_unknown_route_uses_error_format(client) -> None:
     response = client.get("/api/v1/non-esiste")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+
+
+def test_health_reports_deployed_commit(client, monkeypatch) -> None:
+    monkeypatch.delenv("GIT_COMMIT", raising=False)
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    assert client.get("/api/v1/health").json()["commit"] is None
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "b740d5a2658c9b5d908061c326be45b9c2995c74")
+    assert client.get("/api/v1/health").json()["commit"] == "b740d5a2658c"
+    monkeypatch.setenv("GIT_COMMIT", "abc123")
+    assert client.get("/api/v1/health").json()["commit"] == "abc123"

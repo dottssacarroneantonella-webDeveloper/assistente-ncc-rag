@@ -51,10 +51,14 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.meta.outputs.sha }}
+          build-args: |
+            GIT_COMMIT=${{ github.event.workflow_run.head_sha || github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Prova dell'immagine (avvio e /health)
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           # stessi valori di Render: PORT diversa e FORWARDED_ALLOW_IPS="*"
           docker run -d --name demo -p 8000:10000 -e PORT=10000 -e FORWARDED_ALLOW_IPS='*' \
@@ -65,6 +69,7 @@ jobs:
             sleep 2
           done
           curl -fsS http://localhost:8000/api/v1/health | grep -q '"status":"ok"'
+          curl -fsS http://localhost:8000/api/v1/health | grep -q "\"commit\":\"${COMMIT:0:12}\""
           curl -fsS http://localhost:8000/ | grep -q '<div id="root">'
           curl -fsS http://localhost:8000/admin/login | grep -q '<div id="root">'
           docker logs demo | tail -20
@@ -85,14 +90,23 @@ jobs:
             exit 0
           fi
           curl -fsS -X POST "$HOOK" > /dev/null
-      - name: Verifica della demo
+      - name: Verifica della demo (versione appena pubblicata)
         if: vars.DEMO_URL != ''
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          # il piano gratuito impiega fino a qualche minuto per build e avvio
+          # senza deploy hook basta che la demo risponda; con il hook deve rispondere la versione nuova
+          expected="${COMMIT:0:12}"
           for i in $(seq 1 40); do
-            if curl -fsS "${{ vars.DEMO_URL }}/api/v1/health" | grep -q '"status":"ok"'; then
-              echo "Demo online"; exit 0
+            health="$(curl -fsS "${{ vars.DEMO_URL }}/api/v1/health" || true)"
+            if echo "$health" | grep -q '"status":"ok"'; then
+              if [ -z "$HOOK" ] || echo "$health" | grep -q "\"commit\":\"$expected\""; then
+                echo "Demo online con il commit $expected"; exit 0
+              fi
             fi
             sleep 15
           done
-          echo "::error::La demo non risponde"; exit 1
+          echo "::error::La demo non risponde con il commit $expected"
+          echo "$health"
+          exit 1

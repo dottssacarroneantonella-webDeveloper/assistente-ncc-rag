@@ -14,6 +14,9 @@ RUN npm run build
 # --- 2. backend + file statici ----------------------------------------------------------------
 FROM python:3.12-slim
 
+# commit della build, mostrato da /api/v1/health (su Render vale anche RENDER_GIT_COMMIT)
+ARG GIT_COMMIT=""
+ENV GIT_COMMIT=${GIT_COMMIT}
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
