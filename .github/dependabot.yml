@@ -18,3 +18,14 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      # i test e la CI usano Python 3.12: si passa alla versione nuova quando lo fa anche la CI
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
