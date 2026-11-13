@@ -12,6 +12,9 @@ from fastapi.testclient import TestClient
 from app.core.config import PROJECT_DIR, Settings
 from app.main import create_app
 
+ADMIN_EMAIL = "admin@ncc-levante.example"
+ADMIN_PASSWORD = "password-di-test-lunga"  # noqa: S105 - solo per i test
+
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
@@ -26,6 +29,9 @@ def settings(tmp_path: Path) -> Settings:
         rag_embedder="tfidf",
         retry_base_seconds=0,
         max_attempts=3,
+        admin_email=ADMIN_EMAIL,
+        admin_password=ADMIN_PASSWORD,
+        secret_key="chiave-di-test-per-i-jwt-abbastanza-lunga",
     )
 
 
@@ -55,3 +61,16 @@ def ask(client: TestClient) -> Callable[[str], dict]:
         raise AssertionError("Nessuna risposta dal worker entro il tempo limite")
 
     return _ask
+
+
+def login(client: TestClient, email: str = ADMIN_EMAIL, password: str = ADMIN_PASSWORD):
+    return client.post("/api/v1/auth/login", json={"email": email, "password": password})
+
+
+@pytest.fixture
+def admin(client: TestClient) -> TestClient:
+    """Client autenticato come admin, con l'header CSRF già impostato."""
+    response = login(client)
+    assert response.status_code == 204, response.text
+    client.headers["X-CSRF-Token"] = client.cookies["csrf_token"]
+    return client

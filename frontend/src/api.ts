@@ -1,4 +1,14 @@
-import type { ApiErrorBody, ChatMessage, Conversation } from "./types";
+import type {
+  AdminMessage,
+  ApiErrorBody,
+  ChatMessage,
+  Conversation,
+  ConversationSummary,
+  DocumentItem,
+  IndexJob,
+  Page,
+  UnansweredItem,
+} from "./types";
 
 const BASE = "/api/v1";
 
@@ -12,12 +22,18 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    ...init,
-  });
+/** Valore del cookie csrf_token impostato dal server al login (double-submit). */
+export function csrfToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const headers = new Headers(init.headers);
+  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (method !== "GET") headers.set("X-CSRF-Token", csrfToken());
+  const response = await fetch(`${BASE}${path}`, { credentials: "same-origin", ...init, method, headers });
   if (!response.ok) {
     let code = "error";
     let message = `Errore ${response.status}`;
@@ -30,8 +46,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, code, message);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
+
+const json = (body: unknown) => JSON.stringify(body);
 
 export const api = {
   createConversation: () => request<Conversation>("/chat/conversations", { method: "POST" }),
@@ -39,13 +58,45 @@ export const api = {
   sendMessage: (conversationId: string, text: string) =>
     request<{ message_id: string }>(`/chat/conversations/${conversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: json({ text }),
     }),
 
   listMessages: (conversationId: string, after?: string) => {
     const query = after ? `?after=${encodeURIComponent(after)}` : "";
     return request<{ items: ChatMessage[] }>(`/chat/conversations/${conversationId}/messages${query}`);
   },
+};
+
+export const adminApi = {
+  login: (email: string, password: string) =>
+    request<void>("/auth/login", { method: "POST", body: json({ email, password }) }),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  me: () => request<{ email: string }>("/auth/me"),
+
+  documents: () => request<{ items: DocumentItem[] }>("/admin/documents"),
+  uploadDocument: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<DocumentItem>("/admin/documents", { method: "POST", body: form });
+  },
+  deleteDocument: (id: string) => request<void>(`/admin/documents/${id}`, { method: "DELETE" }),
+
+  startIndexJob: () => request<IndexJob>("/admin/index-jobs", { method: "POST" }),
+  indexJobs: (limit = 5) => request<{ items: IndexJob[] }>(`/admin/index-jobs?limit=${limit}`),
+  indexJob: (id: string) => request<IndexJob>(`/admin/index-jobs/${id}`),
+
+  conversations: (page: number, size: number, channel?: string) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (channel) params.set("channel", channel);
+    return request<Page<ConversationSummary>>(`/admin/conversations?${params}`);
+  },
+  conversation: (id: string) =>
+    request<{ conversation: ConversationSummary; messages: AdminMessage[] }>(`/admin/conversations/${id}`),
+
+  unanswered: (status: "open" | "handled", page = 1, size = 20) =>
+    request<Page<UnansweredItem>>(`/admin/unanswered?status=${status}&page=${page}&size=${size}`),
+  updateUnanswered: (id: string, status: "open" | "handled", note: string | null) =>
+    request<UnansweredItem>(`/admin/unanswered/${id}`, { method: "PATCH", body: json({ status, note }) }),
 };
 
 /** Attende la risposta a un messaggio interrogando l'API ogni `intervalMs` (polling). */

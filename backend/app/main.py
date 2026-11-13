@@ -20,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app import __version__
-from app.api import chat, health, whatsapp
+from app.api import admin, auth, chat, health, whatsapp
 from app.api.deps import AppState
 from app.api.errors import register_error_handlers
 from app.core.config import Settings, get_settings
@@ -30,6 +30,7 @@ from app.db.session import Database
 from app.queue.factory import create_queue
 from app.rag.engine import RagEngine
 from app.services import indexing
+from app.services.admins import ensure_admin
 from app.services.documents import seed_example_documents
 from app.worker.processor import MessageProcessor
 from app.worker.runtime import build_channels
@@ -38,10 +39,12 @@ logger = logging.getLogger(__name__)
 API_PREFIX = "/api/v1"
 
 
-def _bootstrap_documents(state: AppState) -> None:
-    """Carica i documenti di esempio e indicizza se l'indice non esiste ancora."""
+def _bootstrap(state: AppState) -> None:
+    """Crea l'admin, carica i documenti di esempio e indicizza se l'indice non esiste."""
     s = state.settings
+    indexing.recover_interrupted_jobs(state.db)
     with state.db.session() as session:
+        ensure_admin(session, s.admin_email, s.admin_password)
         seed_example_documents(session, s.seed_docs_dir, s.docs_dir)
     if not state.engine.is_ready and any(s.docs_dir.glob("*.pdf")):
         job_id = indexing.create_job(state.db)
@@ -62,7 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state = AppState(settings=settings, db=db, queue=queue, engine=engine)
         app.state.services = state
 
-        await asyncio.to_thread(_bootstrap_documents, state)
+        await asyncio.to_thread(_bootstrap, state)
         await queue.connect()
 
         channels = build_channels(settings)
@@ -108,6 +111,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(chat.router, prefix=API_PREFIX)
     app.include_router(whatsapp.router, prefix=API_PREFIX)
+    app.include_router(auth.router, prefix=API_PREFIX)
+    app.include_router(admin.router, prefix=API_PREFIX)
     return app
 
 

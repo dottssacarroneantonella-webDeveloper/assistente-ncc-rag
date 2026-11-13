@@ -35,7 +35,7 @@ def _load_conversation(session: Session, conversation_id: uuid.UUID):  # type: i
     return conversation
 
 
-def _to_out(message: Message) -> MessageOut:
+def message_out(message: Message) -> MessageOut:
     return MessageOut(
         id=message.id,
         direction=message.direction,  # type: ignore[arg-type]
@@ -90,4 +90,4 @@ def list_messages(
 ) -> MessagesOut:
     _load_conversation(session, conversation_id)
     messages = conv.list_messages(session, conversation_id, after=after)
-    return MessagesOut(items=[_to_out(m) for m in messages])
+    return MessagesOut(items=[message_out(m) for m in messages])

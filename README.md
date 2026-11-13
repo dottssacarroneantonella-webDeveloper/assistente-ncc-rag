@@ -33,7 +33,11 @@ dipendenza.
 | Worker separato (`python -m app.worker`) e invio delle risposte con la Graph API | ✅ F2 |
 | Audio, immagini e posizioni: risposta che invita a scrivere la domanda | ✅ F2 |
 | Numeri di telefono mai salvati: solo HMAC-SHA256 + ultime 4 cifre | ✅ F2 |
-| Area admin: login, caricamento PDF, reindicizzazione, domande senza risposta | 🔜 F3 |
+| Area admin: login sicuro (Argon2id, JWT in cookie HttpOnly, CSRF, limite di tentativi) | ✅ F3 |
+| Caricamento ed eliminazione dei PDF (controllo del formato, 10 MB, duplicati) | ✅ F3 |
+| Reindicizzazione come job in background con stato visibile | ✅ F3 |
+| Conversazioni con risposte, fonti, punteggi e tempi di elaborazione | ✅ F3 |
+| Domande senza risposta da gestire con una nota | ✅ F3 |
 | GDPR (conservazione 30 giorni, informativa) e hardening | 🔜 F4 |
 | Demo online con deploy automatico | 🔜 F5 |
 
@@ -110,6 +114,10 @@ npm run dev                        # http://localhost:5173
 Al primo avvio il backend carica i tre PDF di esempio da `examples/ncc-docs/` e costruisce l'indice.
 Prova a chiedere: *"Quanto costa il transfer dall'aeroporto di Bari a Monopoli?"*
 
+Per l'area admin (`http://localhost:5173/admin`) imposta prima nel file `backend/.env`
+`ADMIN_EMAIL`, `ADMIN_PASSWORD` (almeno 12 caratteri) e `SECRET_KEY`: l'admin viene creato al
+primo avvio. Per cambiare la password: `python -m app.cli reset-admin-password <email>`.
+
 ### Con un LLM locale (Ollama)
 
 ```bash
@@ -153,6 +161,11 @@ META_APP_SECRET=<valore del .env> python scripts/send_test_webhook.py "Accettate
 | GET | `/api/v1/chat/conversations/{id}/messages?after=` | Messaggi e risposte con fonti |
 | GET | `/api/v1/whatsapp/webhook` | Handshake di verifica di Meta (`hub.challenge`) |
 | POST | `/api/v1/whatsapp/webhook` | Messaggi WhatsApp in arrivo (firma obbligatoria) |
+| POST | `/api/v1/auth/login` · `logout` · GET `me` | Sessione admin (cookie HttpOnly + CSRF) |
+| GET/POST | `/api/v1/admin/documents` · DELETE `/{id}` | Elenco, caricamento ed eliminazione dei PDF |
+| POST/GET | `/api/v1/admin/index-jobs` · GET `/{id}` | Avvio e stato della reindicizzazione |
+| GET | `/api/v1/admin/conversations` · `/{id}` | Conversazioni paginate e dettaglio con fonti |
+| GET/PATCH | `/api/v1/admin/unanswered` · `/{id}` | Domande senza risposta, aperte o gestite |
 
 Documentazione interattiva: `http://localhost:8000/api/v1/docs`.
 
@@ -183,7 +196,7 @@ backend/
     worker/     intenti, elaborazione dei messaggi, worker separato
   alembic/      migrazioni del database
   tests/
-frontend/       chat React + TypeScript (Vite)
+frontend/       React + TypeScript (Vite): chat demo e area admin (React Router)
 examples/       PDF fittizi dell'attività
 scripts/        PDF di esempio e simulatore di webhook firmati
 docs/spec/      specifica tecnica
@@ -198,7 +211,13 @@ docs/spec/      specifica tecnica
 - Webhook Meta accettati solo con firma HMAC-SHA256 valida (confronto a tempo costante).
 - Numeri di telefono mai salvati in chiaro: HMAC-SHA256 con chiave segreta + ultime 4 cifre;
   il numero viaggia solo nell'evento in coda, il tempo necessario a rispondere.
-- In arrivo (F3-F4): password Argon2id, JWT in cookie HttpOnly con CSRF, rate limiting, CSP.
+- Area admin: password con Argon2id, sessione JWT in cookie `HttpOnly` + `SameSite=Strict`
+  (+ `Secure` fuori dallo sviluppo), token CSRF double-submit sulle modifiche, massimo 5 tentativi
+  di accesso in 15 minuti per IP, messaggio d'errore identico per email e password sbagliate.
+- Upload: solo `application/pdf` con firma `%PDF-`, massimo 10 MB, nome file ripulito, duplicati
+  rifiutati con SHA-256.
+- In produzione l'avvio fallisce se `SECRET_KEY` o `CONTACT_HASH_KEY` sono deboli o predefinite.
+- In arrivo (F4): rate limiting della chat, Content-Security-Policy, conservazione dei dati.
 
 ## Licenza
 

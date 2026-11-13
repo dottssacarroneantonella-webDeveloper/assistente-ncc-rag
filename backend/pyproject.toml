@@ -19,6 +19,8 @@ dependencies = [
     "pypdf>=4.0",
     "httpx>=0.27",
     "aio-pika>=9.4",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.8",
     "rag-pdf-qa @ git+https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa.git",
 ]
 
@@ -43,7 +45,7 @@ asyncio_mode = "strict"
 
 [tool.coverage.run]
 source = ["app"]
-omit = ["app/worker/__main__.py"]
+omit = ["app/worker/__main__.py", "app/cli.py"]
 
 [tool.ruff]
 line-length = 110

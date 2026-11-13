@@ -10,11 +10,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
+DEV_ONLY_SECRET = "solo-per-sviluppo-cambiami"  # noqa: S105 - segnaposto rifiutato in produzione
 
 
 class Settings(BaseSettings):
@@ -56,7 +57,7 @@ class Settings(BaseSettings):
 
     # Privacy
     retention_days: int = Field(default=30, ge=1)
-    contact_hash_key: str = "solo-per-sviluppo-cambiami"  # in produzione: valore casuale lungo
+    contact_hash_key: str = DEV_ONLY_SECRET  # in produzione: valore casuale lungo
 
     # WhatsApp (Meta Cloud API) – attivo solo se WHATSAPP_ENABLED=true e i valori sono presenti
     whatsapp_enabled: bool = False
@@ -67,6 +68,16 @@ class Settings(BaseSettings):
     meta_graph_version: str = "v21.0"
     meta_graph_base_url: str = "https://graph.facebook.com"
     meta_timeout_seconds: float = Field(default=10.0, gt=0)
+
+    # Area admin
+    # firma dei JWT: in produzione valore casuale lungo (l'avvio fallisce con il valore predefinito)
+    secret_key: str = DEV_ONLY_SECRET
+    admin_email: str | None = None
+    admin_password: str | None = None
+    session_hours: int = Field(default=8, ge=1, le=24)
+    login_max_attempts: int = Field(default=5, ge=1)
+    login_window_minutes: int = Field(default=15, ge=1)
+    max_upload_mb: int = Field(default=10, ge=1, le=50)
 
     # Worker
     worker_prefetch: int = Field(default=4, ge=1, le=100)
@@ -79,11 +90,28 @@ class Settings(BaseSettings):
         "meta_phone_number_id",
         "meta_app_secret",
         "meta_verify_token",
+        "admin_email",
+        "admin_password",
         mode="before",
     )
     @classmethod
     def _empty_to_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @model_validator(mode="after")
+    def _no_placeholder_secrets_in_production(self) -> Settings:
+        if self.app_env in ("production", "demo"):
+            weak = [
+                name
+                for name in ("secret_key", "contact_hash_key")
+                if getattr(self, name) == DEV_ONLY_SECRET or len(getattr(self, name)) < 32
+            ]
+            if weak:
+                names = ", ".join(n.upper() for n in weak)
+                raise ValueError(
+                    f"In {self.app_env} imposta un valore casuale di almeno 32 caratteri per {names}"
+                )
+        return self
 
     @property
     def whatsapp_configured(self) -> bool:
@@ -96,6 +124,11 @@ class Settings(BaseSettings):
                 self.meta_verify_token,
             )
         )
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Cookie solo su HTTPS, tranne in sviluppo e nei test (http://localhost)."""
+        return self.app_env not in ("development", "test")
 
     @property
     def is_sqlite(self) -> bool:

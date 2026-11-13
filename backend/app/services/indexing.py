@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 
 from sqlalchemy import select, update
@@ -17,8 +18,21 @@ from app.rag.engine import RagEngine
 logger = logging.getLogger(__name__)
 
 
+class JobAlreadyRunningError(RuntimeError):
+    """C'è già un job in coda o in esecuzione (RF-11)."""
+
+
+_job_lock = threading.Lock()
+
+
 def create_job(db: Database, triggered_by: uuid.UUID | None = None) -> uuid.UUID:
-    with db.session() as session:
+    """Crea un job ``queued``; se ce n'è già uno attivo solleva ``JobAlreadyRunningError``."""
+    with _job_lock, db.session() as session:
+        active = session.scalar(
+            select(IndexJob.id).where(IndexJob.status.in_(("queued", "running"))).limit(1)
+        )
+        if active is not None:
+            raise JobAlreadyRunningError(str(active))
         job = IndexJob(status="queued", triggered_by=triggered_by)
         session.add(job)
         session.flush()
@@ -53,6 +67,12 @@ def run_job(db: Database, engine: RagEngine, settings: Settings, job_id: uuid.UU
     log_event(logger, "index.done", documents=report.documents, chunks=report.chunks)
 
 
-def latest_job(db: Database) -> IndexJob | None:
+def recover_interrupted_jobs(db: Database) -> int:
+    """All'avvio: un job rimasto ``queued``/``running`` è stato interrotto da un riavvio."""
     with db.session() as session:
-        return session.scalar(select(IndexJob).order_by(IndexJob.created_at.desc()).limit(1))
+        result = session.execute(
+            update(IndexJob)
+            .where(IndexJob.status.in_(("queued", "running")))
+            .values(status="failed", error="Interrotto dal riavvio del servizio", finished_at=utcnow())
+        )
+        return result.rowcount or 0
