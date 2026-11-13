@@ -21,12 +21,12 @@ dependencies = [
     "aio-pika>=9.4",
     "argon2-cffi>=23.1",
     "pyjwt>=2.8",
-    "rag-pdf-qa @ git+https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa.git",
+    "rag-pdf-qa @ git+https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa.git@77efa0d36162710451af0b1854aea201c192f60b",
 ]
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
-semantic = ["rag-pdf-qa[semantic,faiss] @ git+https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa.git"]
+semantic = ["rag-pdf-qa[semantic,faiss] @ git+https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa.git@77efa0d36162710451af0b1854aea201c192f60b"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
