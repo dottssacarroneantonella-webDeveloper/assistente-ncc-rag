@@ -1,0 +1,39 @@
+# Ambiente locale completo: PostgreSQL + API (con worker integrato, coda in memoria).
+# RabbitMQ e il worker separato arrivano con la Fase 2.
+#   cp .env.example .env
+#   docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: assistente
+      POSTGRES_USER: assistente
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solo-per-sviluppo-locale}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assistente -d assistente"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://assistente:${POSTGRES_PASSWORD:-solo-per-sviluppo-locale}@db:5432/assistente
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    volumes:
+      - appdata:/srv/backend/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  appdata:
