@@ -72,6 +72,8 @@ jobs:
           curl -fsS http://localhost:8000/api/v1/health | grep -q "\"commit\":\"${COMMIT:0:12}\""
           curl -fsS http://localhost:8000/ | grep -q '<div id="root">'
           curl -fsS http://localhost:8000/admin/login | grep -q '<div id="root">'
+          curl -fsS http://localhost:8000/ | grep -q 'property="og:image"'
+          curl -fsS -o /dev/null http://localhost:8000/og-image.png
           docker logs demo | tail -20
           docker rm -f demo
 
