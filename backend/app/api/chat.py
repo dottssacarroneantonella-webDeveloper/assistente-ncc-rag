@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import AppState, get_session, get_state
+from app.api.deps import AppState, client_ip, enforce_limit, get_session, get_state
 from app.api.errors import ApiError
 from app.api.schemas import (
     ConversationOut,
@@ -52,8 +52,11 @@ def message_out(message: Message) -> MessageOut:
 
 @router.post("/conversations", status_code=201, response_model=ConversationOut)
 def create_conversation(
-    state: AppState = Depends(get_state), session: Session = Depends(get_session)
+    request: Request, state: AppState = Depends(get_state), session: Session = Depends(get_session)
 ) -> ConversationOut:
+    enforce_limit(
+        state.conversation_limiter, client_ip(request), "Troppe conversazioni aperte: riprova più tardi"
+    )
     conversation = conv.create_conversation(session, channel="web")
     return ConversationOut(id=conversation.id, welcome=welcome_message(state.settings.business_name))
 
@@ -62,8 +65,12 @@ def create_conversation(
 async def send_message(
     conversation_id: uuid.UUID,
     payload: MessageIn,
+    request: Request,
     state: AppState = Depends(get_state),
 ) -> MessageAccepted:
+    ip = client_ip(request)
+    enforce_limit(state.chat_minute_limiter, ip, "Stai scrivendo troppo velocemente: attendi un minuto")
+    enforce_limit(state.chat_day_limiter, ip, "Hai raggiunto il limite giornaliero di messaggi della demo")
     text = payload.text.strip()
     if not text:
         raise ApiError(422, "validation_error", "Il messaggio è vuoto")

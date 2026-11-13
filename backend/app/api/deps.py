@@ -30,11 +30,16 @@ class AppState:
     queue: MessageQueue
     engine: RagEngine
     login_limiter: SlidingWindowLimiter = field(init=False)
+    chat_minute_limiter: SlidingWindowLimiter = field(init=False)
+    chat_day_limiter: SlidingWindowLimiter = field(init=False)
+    conversation_limiter: SlidingWindowLimiter = field(init=False)
 
     def __post_init__(self) -> None:
-        self.login_limiter = SlidingWindowLimiter(
-            self.settings.login_max_attempts, self.settings.login_window_minutes * 60
-        )
+        s = self.settings
+        self.login_limiter = SlidingWindowLimiter(s.login_max_attempts, s.login_window_minutes * 60)
+        self.chat_minute_limiter = SlidingWindowLimiter(s.chat_messages_per_minute, 60)
+        self.chat_day_limiter = SlidingWindowLimiter(s.chat_messages_per_day, 24 * 3600)
+        self.conversation_limiter = SlidingWindowLimiter(s.chat_conversations_per_hour, 3600)
 
 
 def get_state(request: Request) -> AppState:
@@ -48,6 +53,14 @@ def get_session(request: Request) -> Iterator[Session]:
 
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "sconosciuto"
+
+
+def enforce_limit(limiter: SlidingWindowLimiter, key: str, message: str) -> None:
+    """Solleva 429 con ``Retry-After`` se il limite è raggiunto, altrimenti registra l'evento."""
+    if not limiter.check_and_hit(key):
+        raise ApiError(
+            429, "rate_limited", message, {"retry_after_seconds": max(1, limiter.retry_after(key))}
+        )
 
 
 def require_admin(

@@ -80,3 +80,9 @@ body { margin: 0; background: #d1d7db; }
   .page__note { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .bubble--typing span { animation: none; } }
+
+.page__note a { color: #075e54; }
+.privacy { min-height: 100vh; display: flex; justify-content: center; padding: 24px 16px; }
+.privacy__card { max-width: 720px; background: #fff; border-radius: 12px; padding: 24px 32px; line-height: 1.55; box-shadow: 0 6px 24px rgb(0 0 0 / 0.1); }
+.privacy__card a { color: #075e54; }
+.privacy__note { background: #fff3cd; color: #5c4400; padding: 10px 12px; border-radius: 6px; }

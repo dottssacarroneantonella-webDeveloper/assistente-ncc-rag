@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, waitForReply } from "../api";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, Conversation } from "../types";
 import { MessageBubble } from "./MessageBubble";
 
 const MAX_CHARS = 1000;
@@ -9,6 +9,34 @@ const SUGGESTIONS = [
   "Accettate animali a bordo?",
   "Come posso disdire una prenotazione?",
 ];
+
+const STORAGE_KEY = "assistente-ncc.conversation";
+
+function loadStoredConversation(): Conversation | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Conversation) : null;
+    return parsed && typeof parsed.id === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeConversation(conversation: Conversation): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(conversation));
+  } catch {
+    /* storage non disponibile: la chat funziona comunque */
+  }
+}
+
+function forgetConversation(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignorato */
+  }
+}
 
 interface Props {
   businessName: string;
@@ -26,14 +54,28 @@ export function ChatWindow({ businessName, pollIntervalMs = 1000 }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .createConversation()
-      .then((conversation) => {
-        if (cancelled) return;
-        setConversationId(conversation.id);
-        setWelcome(conversation.welcome);
-      })
-      .catch(() => !cancelled && setError("Il servizio non è raggiungibile. Riprova più tardi."));
+    async function start() {
+      // la conversazione sopravvive al ricaricamento della pagina, ma non alla chiusura della scheda
+      const stored = loadStoredConversation();
+      if (stored) {
+        try {
+          const { items } = await api.listMessages(stored.id);
+          if (cancelled) return;
+          setConversationId(stored.id);
+          setWelcome(stored.welcome);
+          setMessages(items);
+          return;
+        } catch {
+          forgetConversation(); // scaduta o cancellata: se ne crea una nuova
+        }
+      }
+      const conversation = await api.createConversation();
+      if (cancelled) return;
+      storeConversation(conversation);
+      setConversationId(conversation.id);
+      setWelcome(conversation.welcome);
+    }
+    start().catch(() => !cancelled && setError("Il servizio non è raggiungibile. Riprova più tardi."));
     return () => {
       cancelled = true;
     };

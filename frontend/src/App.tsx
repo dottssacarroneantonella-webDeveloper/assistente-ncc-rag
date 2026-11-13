@@ -7,11 +7,13 @@ import { DocumentsPage } from "./admin/DocumentsPage";
 import { LoginPage } from "./admin/LoginPage";
 import { UnansweredPage } from "./admin/UnansweredPage";
 import { ChatPage } from "./pages/ChatPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<ChatPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route
         path="/admin/*"
         element={

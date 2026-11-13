@@ -10,6 +10,7 @@ All'avvio (lifespan):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,7 +30,7 @@ from app.db.base import Base
 from app.db.session import Database
 from app.queue.factory import create_queue
 from app.rag.engine import RagEngine
-from app.services import indexing
+from app.services import indexing, retention
 from app.services.admins import ensure_admin
 from app.services.documents import seed_example_documents
 from app.worker.processor import MessageProcessor
@@ -75,10 +76,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # con RabbitMQ gira separato (python -m app.worker)
         if settings.queue_backend == "memory":
             await queue.start_consuming(processor.handle, processor.on_failure)
+        # conservazione dei dati: pulizia all'avvio e poi periodica (RF-16)
+        retention_task = asyncio.create_task(
+            retention.run_periodically(db, settings.retention_days, settings.retention_interval_hours),
+            name="retention",
+        )
         logger.info("Avvio completato (versione %s, coda %s)", __version__, settings.queue_backend)
         try:
             yield
         finally:
+            retention_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await retention_task
             await queue.close()
             for channel in channels.values():
                 await channel.close()
@@ -99,12 +108,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "X-CSRF-Token"],
     )
 
+    docs_paths = (f"{API_PREFIX}/docs", f"{API_PREFIX}/openapi.json")
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
         response: Response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        headers = response.headers
+        headers.setdefault("X-Content-Type-Options", "nosniff")
+        headers.setdefault("X-Frame-Options", "DENY")
+        headers.setdefault("Referrer-Policy", "no-referrer")
+        headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        if not request.url.path.startswith(docs_paths):
+            # l'API restituisce solo JSON: nessuna risorsa da caricare, nessun frame
+            headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        if request.url.path.startswith(API_PREFIX) and request.url.path not in docs_paths:
+            headers.setdefault("Cache-Control", "no-store")
+        if settings.cookie_secure:
+            headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
 
     register_error_handlers(app)

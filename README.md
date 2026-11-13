@@ -38,7 +38,11 @@ dipendenza.
 | Reindicizzazione come job in background con stato visibile | ✅ F3 |
 | Conversazioni con risposte, fonti, punteggi e tempi di elaborazione | ✅ F3 |
 | Domande senza risposta da gestire con una nota | ✅ F3 |
-| GDPR (conservazione 30 giorni, informativa) e hardening | 🔜 F4 |
+| Conservazione dei dati: conversazioni eliminate dopo 30 giorni | ✅ F4 |
+| Informativa privacy, conversazione ripresa dopo il ricaricamento della pagina | ✅ F4 |
+| Limiti della chat per IP (10 messaggi al minuto, 100 al giorno) | ✅ F4 |
+| Header di sicurezza (CSP, HSTS, Permissions-Policy) e controlli di accessibilità con axe-core | ✅ F4 |
+| pip-audit, npm audit e Dependabot | ✅ F4 |
 | Demo online con deploy automatico | 🔜 F5 |
 
 ## Architettura
@@ -174,7 +178,7 @@ Documentazione interattiva: `http://localhost:8000/api/v1/docs`.
 ```bash
 cd backend && pytest --cov=app        # API, webhook, worker, coda, intenti, migrazioni
 RABBITMQ_TEST_URL=amqp://guest:guest@localhost:5672/ pytest tests/test_rabbitmq.py
-cd frontend && npm test               # componenti React con Vitest
+cd frontend && npm test               # componenti React e accessibilità (Vitest + axe-core)
 ```
 
 La CI su GitHub Actions esegue lint (ruff), test con copertura minima dell'80% (con un RabbitMQ
@@ -217,7 +221,23 @@ docs/spec/      specifica tecnica
 - Upload: solo `application/pdf` con firma `%PDF-`, massimo 10 MB, nome file ripulito, duplicati
   rifiutati con SHA-256.
 - In produzione l'avvio fallisce se `SECRET_KEY` o `CONTACT_HASH_KEY` sono deboli o predefinite.
-- In arrivo (F4): rate limiting della chat, Content-Security-Policy, conservazione dei dati.
+- Chat limitata per IP (10 messaggi al minuto, 100 al giorno, 30 conversazioni all'ora) con
+  risposta `429` e header `Retry-After`.
+- Header di sicurezza su ogni risposta: `Content-Security-Policy: default-src 'none'`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cache-Control: no-store` e, fuori
+  dallo sviluppo, `Strict-Transport-Security`.
+- GDPR: conversazioni eliminate automaticamente dopo `RETENTION_DAYS` giorni (anche a mano con
+  `python -m app.cli purge-expired`), comando `CANCELLA DATI`, informativa nella chat, log senza
+  il testo dei messaggi.
+- Dipendenze controllate a ogni push con `pip-audit` e `npm audit`; Dependabot ogni settimana.
+
+## Accessibilità
+
+La chat e l'area admin usano etichette per tutti i campi, navigazione da tastiera con focus
+visibile, annuncio delle nuove risposte agli screen reader (`aria-live`) e rispettano
+`prefers-reduced-motion`. I test eseguono **axe-core** (regole WCAG 2.1 A/AA) sulla chat,
+sull'informativa e sul login; il contrasto dei colori richiede un browser reale e va verificato
+a parte.
 
 ## Licenza
 

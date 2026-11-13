@@ -47,7 +47,10 @@ def error_response(status_code: int, code: str, message: str, details: object | 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
-        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+        response = error_response(exc.status_code, exc.code, exc.message, exc.details)
+        if exc.status_code == 429 and isinstance(exc.details, dict):
+            response.headers["Retry-After"] = str(exc.details.get("retry_after_seconds", 60))
+        return response
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:

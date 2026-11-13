@@ -27,18 +27,35 @@ class SlidingWindowLimiter:
 
     def is_blocked(self, key: str) -> bool:
         with self._lock:
-            return len(self._prune(key, self._clock())) >= self.max_events
+            blocked = len(self._prune(key, self._clock())) >= self.max_events
+            if not self._events[key]:
+                del self._events[key]  # niente chiavi vuote: la memoria non cresce
+            return blocked
 
     def retry_after(self, key: str) -> int:
         with self._lock:
             events = self._prune(key, self._clock())
             if len(events) < self.max_events:
+                if not events:
+                    del self._events[key]
                 return 0
             return max(1, int(self.window - (self._clock() - events[0])))
 
     def hit(self, key: str) -> None:
         with self._lock:
             self._prune(key, self._clock()).append(self._clock())
+
+    def check_and_hit(self, key: str) -> bool:
+        """Registra un evento se c'è spazio; restituisce False se il limite è raggiunto."""
+        with self._lock:
+            events = self._prune(key, self._clock())
+            if len(events) >= self.max_events:
+                return False
+            events.append(self._clock())
+            return True
+
+    def __len__(self) -> int:
+        return len(self._events)
 
     def reset(self, key: str) -> None:
         with self._lock:

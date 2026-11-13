@@ -42,6 +42,10 @@ jobs:
           ruff format --check --config pyproject.toml . ../scripts
       - name: Test con copertura
         run: pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+      - name: Vulnerabilità note nelle dipendenze (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit --skip-editable --progress-spinner off
 
   frontend:
     name: Frontend (React + TypeScript)
@@ -62,6 +66,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Vulnerabilità note nelle dipendenze (npm audit)
+        run: npm audit --omit=dev --audit-level=high
 
   docker:
     name: Build immagine Docker

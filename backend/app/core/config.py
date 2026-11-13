@@ -57,6 +57,12 @@ class Settings(BaseSettings):
 
     # Privacy
     retention_days: int = Field(default=30, ge=1)
+    retention_interval_hours: float = Field(default=24, gt=0)
+
+    # Limiti della chat web per IP (RNF / sezione 7)
+    chat_messages_per_minute: int = Field(default=10, ge=1)
+    chat_messages_per_day: int = Field(default=100, ge=1)
+    chat_conversations_per_hour: int = Field(default=30, ge=1)
     contact_hash_key: str = DEV_ONLY_SECRET  # in produzione: valore casuale lungo
 
     # WhatsApp (Meta Cloud API) – attivo solo se WHATSAPP_ENABLED=true e i valori sono presenti

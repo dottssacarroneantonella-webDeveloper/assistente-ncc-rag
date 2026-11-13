@@ -19,6 +19,7 @@ describe("ChatWindow", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    sessionStorage.clear();
     fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.endsWith("/chat/conversations") && init?.method === "POST") return json(CONVERSATION, 201);
       if (url.endsWith("/messages") && init?.method === "POST") return json({ message_id: "m1" }, 202);
@@ -51,6 +52,22 @@ describe("ChatWindow", () => {
     fetchMock.mockImplementationOnce(() => Promise.reject(new TypeError("offline")));
     render(<ChatWindow businessName="NCC" />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("non è raggiungibile"));
+  });
+
+  it("riprende la conversazione dopo il ricaricamento della pagina", async () => {
+    sessionStorage.setItem("assistente-ncc.conversation", JSON.stringify(CONVERSATION));
+    render(<ChatWindow businessName="NCC" />);
+    expect(await screen.findByText("Il transfer costa 85 euro.")).toBeInTheDocument();
+    const created = fetchMock.mock.calls.some(([u, i]) => String(u).endsWith("/chat/conversations") && i?.method === "POST");
+    expect(created).toBe(false);
+  });
+
+  it("crea una nuova conversazione se quella salvata non esiste più", async () => {
+    sessionStorage.setItem("assistente-ncc.conversation", JSON.stringify({ id: "scaduta", welcome: "vecchio" }));
+    fetchMock.mockImplementationOnce(() => json({ error: { code: "conversation_not_found", message: "x" } }, 404));
+    render(<ChatWindow businessName="NCC" />);
+    expect(await screen.findByText(CONVERSATION.welcome)).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem("assistente-ncc.conversation")!).id).toBe("c1");
   });
 
   it("disabilita l'invio con il campo vuoto", async () => {
