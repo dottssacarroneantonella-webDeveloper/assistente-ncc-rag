@@ -81,7 +81,7 @@ describe("area admin", () => {
     await userEvent.type(screen.getByLabelText("Password"), "giusta-e-lunga");
     await userEvent.click(screen.getByRole("button", { name: "Accedi" }));
     expect(await screen.findByRole("heading", { name: "Documenti" })).toBeInTheDocument();
-    const row = (await screen.findByText("listino_2026.pdf")).closest("tr")!;
+    const row = (await screen.findByRole("cell", { name: "listino_2026.pdf" })).closest("tr")!;
     expect(within(row).getByText("indicizzato")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Reindicizza" }));
