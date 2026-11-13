@@ -165,6 +165,19 @@ class RabbitMQQueue(MessageQueue):
         declared = await self._channel.declare_queue(queue_name, durable=True, passive=True)
         return declared.declaration_result.message_count or 0
 
+    async def drain_dead_letters(self, limit: int = 100) -> list[Event]:
+        """Legge (e rimuove) gli eventi dalla coda di errore, per ispezione o test."""
+        await self.connect()
+        assert self._channel is not None
+        queue = await self._channel.get_queue(self.dead_letter_queue)
+        events: list[Event] = []
+        for _ in range(limit):
+            message = await queue.get(no_ack=True, fail=False)
+            if message is None:
+                break
+            events.append(decode(message))
+        return events
+
     async def purge(self) -> None:
         """Svuota tutte le code (solo per i test)."""
         await self.connect()

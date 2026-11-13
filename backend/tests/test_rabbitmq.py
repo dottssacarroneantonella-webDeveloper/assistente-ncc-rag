@@ -100,8 +100,15 @@ async def test_final_failure_goes_to_dead_letter_queue() -> None:
     await queue.start_consuming(handler, on_failure)
     await queue.publish(Event("message.received", {"message_id": "3"}))
     await until(lambda: failures == [2])
-    await asyncio.sleep(0.2)
-    assert await queue.message_count(queue.dead_letter_queue) == 1
+    dead: list[Event] = []
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10
+    while not dead and loop.time() < deadline:
+        dead = await queue.drain_dead_letters()
+        await asyncio.sleep(0.1)
+    assert [e.payload for e in dead] == [{"message_id": "3"}]
+    assert dead[0].attempt == 2
+    assert dead[0].headers["error"] == "sempre giù"
     assert await queue.message_count(queue.main_queue) == 0
     await cleanup(queue)
 
