@@ -29,3 +29,6 @@ updates:
     ignore:
       - dependency-name: python
         update-types: ["version-update:semver-minor"]
+      # Node: solo versioni LTS (pari), aggiornate a mano
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
