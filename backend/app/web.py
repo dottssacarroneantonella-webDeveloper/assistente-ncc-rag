@@ -27,7 +27,7 @@ def mount_frontend(app: FastAPI, static_dir: Path, api_prefix: str) -> None:
     if not index.is_file():
         raise RuntimeError(f"STATIC_DIR non contiene index.html: {root}")
 
-    @app.get("/{path:path}", include_in_schema=False)
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def frontend(path: str) -> FileResponse:
         if path.startswith(api_prefix.strip("/")):
             raise StarletteHTTPException(status_code=404)

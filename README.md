@@ -11,6 +11,9 @@ Assistente virtuale per un servizio **NCC / transfer** che risponde alle domande
 citando le fonti. Il canale finale è **WhatsApp** (Meta Cloud API); per provarlo senza account
 Meta c'è una **chat web in stile WhatsApp** che usa esattamente la stessa pipeline.
 
+**▶ Demo online: [assistente-ncc-rag.onrender.com](https://assistente-ncc-rag.onrender.com)**
+(piano gratuito: se il servizio era in pausa, la prima apertura richiede circa un minuto)
+
 Il motore di ricerca sui documenti è la mia libreria
 [rag-pdf-qa](https://github.com/dottssacarroneantonella-webDeveloper/rag-pdf-qa), usata qui come
 dipendenza.

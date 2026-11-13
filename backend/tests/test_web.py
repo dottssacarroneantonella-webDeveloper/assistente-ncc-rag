@@ -53,3 +53,7 @@ def test_no_path_traversal(site) -> None:
 def test_missing_index_fails_fast(settings, tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="index.html"):
         create_app(settings.model_copy(update={"static_dir": tmp_path}))
+
+
+def test_head_request_for_uptime_checks(site) -> None:
+    assert site.head("/").status_code == 200
