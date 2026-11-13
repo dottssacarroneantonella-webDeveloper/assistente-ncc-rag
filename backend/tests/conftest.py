@@ -7,9 +7,10 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.core.config import PROJECT_DIR, Settings
 from app.main import create_app
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture

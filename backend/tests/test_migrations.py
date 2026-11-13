@@ -6,9 +6,10 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from sqlalchemy import create_engine
+
 from app.core.config import BACKEND_DIR, get_settings
 from app.db.base import Base
-from sqlalchemy import create_engine
 
 
 def test_migration_matches_models(tmp_path: Path, monkeypatch) -> None:

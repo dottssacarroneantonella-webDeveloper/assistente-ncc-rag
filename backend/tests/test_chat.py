@@ -1,7 +1,8 @@
 import uuid
 
-from app.db.models import Document, Message, UnansweredQuestion
 from sqlalchemy import func, select
+
+from app.db.models import Document, Message, UnansweredQuestion
 
 
 def test_seed_documents_loaded(client) -> None:

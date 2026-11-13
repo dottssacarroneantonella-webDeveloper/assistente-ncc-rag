@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+
 from app.queue.base import Event, TransientError
 from app.queue.memory import InMemoryQueue
 

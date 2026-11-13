@@ -1,4 +1,5 @@
 import pytest
+
 from app.worker.intents import Intent, detect_intent, welcome_message
 
 

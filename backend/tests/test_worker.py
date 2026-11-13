@@ -1,7 +1,8 @@
+from sqlalchemy import select
+
 from app.db.models import Message
 from app.queue.base import TransientError
 from app.worker.intents import FAILURE_REPLY
-from sqlalchemy import select
 
 
 def test_llm_down_produces_apology_after_retries(client, ask, monkeypatch) -> None:
